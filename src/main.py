@@ -12,7 +12,8 @@ import json
 import pandas as pd
 import requests_cache      
 import numpy as np
-requests_cache.install_cache('cache/inaturalist_cache', backend='sqlite', expire_after=1800000)
+import plotly.graph_objects as go
+requests_cache.install_cache('cache/inaturalist_cache', backend='sqlite', expire_after=10_000_000)
 
 INAT_COLORADO_ID = 34
 INAT_USA_ID = 1
@@ -30,6 +31,13 @@ COUNTY_SPECIES = None
 REQUEST_COUNT = 0
 CACHE_HIT_COUNT = 0
 CACHE_MISS_COUNT = 0
+
+PLANTS_ANCESTRY_PATH = "48460/47126/"
+ANIMALS_ANCESTRY_PATH = "48460/1/"
+VERTBRATES_ANCESTRY_PATH = "48460/1/2/355675/"
+ARTHROPODS_ANCESTRY_PATH = "48460/1/47120/"
+# PLANTS_TAXON_ID = 47126
+# ANIMALS = ['Aves', 'Mammalia', 'Reptilia', 'Amphibia', 'Actinopterygii', 'Chondrichthyes', 'Cephalaspidomorphi', 'Myxini']
 
 #### Get the counties for a given state ID from the iNaturalist places CSV file
 def get_USA_State_Counties(id):
@@ -123,10 +131,18 @@ def get_county_species_dataFrame():
         COUNTY_SPECIES = pd.DataFrame(columns=['county_id','taxon_id'])
         COUNTY_SPECIES.set_index(['county_id','taxon_id'], inplace=True)
     return COUNTY_SPECIES
+def get_taxonomy_data():
+    global TAXONOMY_DATA
+    if TAXONOMY_DATA is None:
+        TAXONOMY_DATA = pd.DataFrame(columns=['taxon_id','name','rank','ancestry','iconic_taxon_name','iconic_taxon_id','preferred_common_name','wikipedia_url'])
+        TAXONOMY_DATA.set_index(['taxon_id'], inplace=True)
+    return TAXONOMY_DATA
 def get_county_species_result(county_id,county_name, filter_type="all", force_refresh=False):
     print(filter_type, county_id, county_name)
     global COUNTY_SPECIES
+    global TAXONOMY_DATA
     county_species_df = get_county_species_dataFrame()
+    taxonomy_df = get_taxonomy_data()
     total_pages = 1
     current_page = 1
     per_page = 500
@@ -156,7 +172,17 @@ def get_county_species_result(county_id,county_name, filter_type="all", force_re
             county_species_df[filter_type+"_species_count"] = np.nan
 
         for result in results:
-            # print(county_species_df.head())
+            if result['taxon']['id'] not in taxonomy_df.index:
+                taxonomy_df.loc[result['taxon']['id'], 'name'] = result['taxon']['name'] if 'name' in result['taxon'] else pd.NA
+                taxonomy_df.loc[result['taxon']['id'], 'rank'] = result['taxon']['rank'] if 'rank' in result['taxon'] else pd.NA
+                taxonomy_df.loc[result['taxon']['id'], 'ancestry'] = result['taxon']['ancestry'] if 'ancestry' in result['taxon'] else pd.NA
+                taxonomy_df.loc[result['taxon']['id'], 'iconic_taxon_name'] = result['taxon']['iconic_taxon_name'] if 'iconic_taxon_name' in result['taxon'] else pd.NA
+                taxonomy_df.loc[result['taxon']['id'], 'iconic_taxon_id'] = result['taxon']['iconic_taxon_id'] if 'iconic_taxon_id' in result['taxon'] else pd.NA
+                taxonomy_df.loc[result['taxon']['id'], 'preferred_common_name'] = result['taxon']['preferred_common_name'] if 'preferred_common_name' in result['taxon'] else pd.NA
+                taxonomy_df.loc[result['taxon']['id'], 'english_common_name'] = result['taxon']['english_common_name'] if 'english_common_name' in result['taxon'] else pd.NA
+                taxonomy_df.loc[result['taxon']['id'], 'wikipedia_url'] = result['taxon']['wikipedia_url'] if 'wikipedia_url' in result['taxon'] else pd.NA
+            else:
+                pass
             county_species_df.loc[(county_id, result['taxon']['id']), filter_type+"_species_count"] = int(result['count'])
             county_species_df.loc[(county_id, result['taxon']['id']), "county_name"] = county_name
         if not response.from_cache:
@@ -173,36 +199,51 @@ def get_county_species_result(county_id,county_name, filter_type="all", force_re
 def add_county_species_counts_to_dataframe(df, force_refresh=False):
     df = get_county_dataframe(force_refresh=force_refresh)
     yearMonthDay = datetime.now().strftime("%Y-%m-%d")
-    if os.path.exists("data/processed/colorado_county_species_counts_"+yearMonthDay+".parquet") and not force_refresh:
+    yearMonth = datetime.now().strftime("%Y-%m")
+    if os.path.exists("data/processed/colorado_county_species_counts_"+yearMonthDay+".parquet") and os.path.exists("data/processed/taxonomy_data_"+yearMonth+".parquet") and not force_refresh:
         print("Loading county species counts from parquet file")
         df_county_species_df = pd.read_parquet("data/processed/colorado_county_species_counts_"+yearMonthDay+".parquet")
+        print("Loading taxonomy data from parquet file")
+        df_taxonomy_df = pd.read_parquet("data/processed/taxonomy_data_"+yearMonth+".parquet")
+        global TAXONOMY_DATA
+        TAXONOMY_DATA = df_taxonomy_df
     else:
         print("Getting county species counts from iNaturalist API")
-        df_county_species_df = get_county_species_dataFrame()
-        # df_county_species_df = pd.DataFrame(columns=['county_id','taxon_id'])
-        # df_county_species_df.set_index(['county_id','taxon_id'], inplace=True)
-        # df = get_county_dataframe(force_refresh=force_refresh)
         for df_row in df.itertuples():
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="all")
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="native")
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="invasive")
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="endemic")
-        df_county_species_df = get_county_species_dataFrame()
         
-        yearMonthDay = datetime.now().strftime("%Y-%m-%d")
+        df_county_species_df = get_county_species_dataFrame()
         df_county_species_df.to_parquet("data/processed/colorado_county_species_counts_"+yearMonthDay+".parquet", index=True)
+        df_taxonomy_df = get_taxonomy_data()
+        df_taxonomy_df.to_parquet("data/processed/taxonomy_data_"+yearMonth+".parquet", index=True)
         print("Finished getting species counts for all counties. Saving to parquet file")
     
     # df_county_species_df.reset_index(inplace=True)
     # df_county_species_df = df_county_species_df[df_county_species_df['all_species_count'] > 2]
     print("df_county_species_df head:", df_county_species_df.head())
-    df_county = df_county_species_df.groupby('county_id').agg({
+    df_county_species_taxonomy_df = pd.merge(df_county_species_df, df_taxonomy_df, left_on='taxon_id', right_index=True)
+    # print("df_county_species_taxonomy_df head after merge:", df_county_species_taxonomy_df.head())
+    # np.where()
+    # df_county_species_taxonomy_df.where(df_county_species_taxonomy_df['ancestry'].str.startswith(PLANTS_ANCESTRY_PATH),)
+    df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(plant_count=lambda x: np.where(x['ancestry'].str.startswith(PLANTS_ANCESTRY_PATH), x['all_species_count'], np.nan))
+    df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(animal_count=lambda x: np.where(x['ancestry'].str.startswith(ANIMALS_ANCESTRY_PATH), x['all_species_count'], np.nan))
+    df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(vertbrate_count=lambda x: np.where(x['ancestry'].str.startswith(VERTBRATES_ANCESTRY_PATH), x['all_species_count'], np.nan))
+    df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(arthropod_count=lambda x: np.where(x['ancestry'].str.startswith(ARTHROPODS_ANCESTRY_PATH), x['all_species_count'], np.nan))
+    df_county = df_county_species_taxonomy_df.groupby('county_id').agg({
         'all_species_count': 'count',
         'native_species_count': 'count',
         'invasive_species_count': 'count',
         'endemic_species_count': 'count',
+        'plant_count': 'count',
+        'animal_count': 'count',
+        'vertbrate_count': 'count',
+        'arthropod_count': 'count',
         'county_name': 'first'
-    })
+    }).rename(columns={'plant_count': 'flora_species_count', 'animal_count': 'fauna_species_count', 'vertbrate_count': 'vertebrate_species_count', 'arthropod_count': 'arthropod_species_count'})
+    df_county = df_county.assign(flora_Fauna_species_count=lambda x: x['flora_species_count'] + x['fauna_species_count'])
     df_county = df_county.assign(native_invasive_ratio=lambda x: x['native_species_count'] / x['invasive_species_count'].replace(0, np.nan))
     return df_county
 def add_county_species_counts_to_dataframe_old(df, force_refresh=False):
@@ -295,8 +336,52 @@ def get_iNat_county_data():
 
     INAT_COUNTY_DATA = counties
     return INAT_COUNTY_DATA
+def get_map_buttons(df):
+    button1 = go.layout.updatemenu.Button(label="All Species",
+                   method="update",
+                   args=[{
+                    #    "hovertext":"All Species Count",
+                         "z":[df['all_species_count']],
+                        #  "color": [df['all_species_count']],
+                        #  "colorbar": {"title": "All Species Count"},
+                         "colorscale": "Blues"},
 
-
+                       {"coloraxis": {"colorscale": "Blues", "colorbar": {"title": {"text": "All Species Count"}}} }])
+    button2 = go.layout.updatemenu.Button(label="Native Species",
+                   method="relayout",
+                   args=[{"colorscale": "Cividis",
+                       "color": [df['native_species_count']]},
+                         {"coloraxis": {"colorbar": {"title": "Native Species Count"}}}])
+    button3 = go.layout.updatemenu.Button(label="Invasive Species",
+                   method="update",
+                   args=[{"colorscale": "Blues",
+                       "color": [df['invasive_species_count']]},
+                         {"coloraxis": {"colorbar": {"title": "Invasive Species Count"}}}])
+    button4 = go.layout.updatemenu.Button(label="Flora Species",
+                   method="update",
+                   args=[{"color": [df['flora_species_count']]},
+                         {"coloraxis": {"colorbar": {"title": "Flora Species Count"}}}])
+    button5 = go.layout.updatemenu.Button(label="Fauna Species",
+                   method="update",
+                   args=[{"color": [df['fauna_species_count']]},
+                         {"coloraxis": {"colorbar": {"title": "Fauna Species Count"}}}])
+    button6 = go.layout.updatemenu.Button(label="Vertebrate Species",
+                   method="update",
+                   args=[{"color": [df['vertebrate_species_count']]},
+                         {"coloraxis": {"colorbar": {"title": "Vertebrate Species Count"}}}])
+    button7 = go.layout.updatemenu.Button(label="Arthropod Species",   
+                   method="update",
+                   args=[{"color": [df['arthropod_species_count']]},
+                         {"coloraxis": {"colorbar": {"title": "Arthropod Species Count"}}}])
+    button8 = go.layout.updatemenu.Button(label="Flora + Fauna Species",
+                   method="update",
+                   args=[{"color": [df['flora_Fauna_species_count']]},
+                         {"coloraxis": {"colorbar": {"title": "Flora + Fauna Species Count"}}}])
+    button9 = go.layout.updatemenu.Button(label="Native/Invasive Ratio",
+                   method="update",
+                   args=[{"color": [df['native_invasive_ratio']]},
+                         {"coloraxis": {"colorbar": {"title": "Native/Invasive Ratio"}}}])
+    return [button1, button2, button3, button4, button5, button6, button7, button8, button9]
 
 def main():
     get_iNat_county_data()
@@ -306,23 +391,31 @@ def main():
     df = get_county_dataframe()
     df = add_county_species_counts_to_dataframe(df, force_refresh=False)
     print(df.head())
+    taxon = get_taxonomy_data()
+    print(taxon.head())
     # df = get_species_density()
     import plotly.express as px
     print("Got counties data, now plotting Species Counts")
     print(df['invasive_species_count'].head())
     print(f'requests: {REQUEST_COUNT}, Cache Hits: {CACHE_HIT_COUNT}, Cache Misses: {CACHE_MISS_COUNT}')
 
-    fig = px.choropleth_map(df, geojson=get_county_geometry().json(),featureidkey='properties.NAME', locations='county_name', color='native_invasive_ratio',
+    fig = px.choropleth_map(df, geojson=get_county_geometry().json(),featureidkey='properties.NAME', locations='county_name', color='arthropod_species_count',
                             color_continuous_scale="Viridis",
                             #range_color=(0, 12),
                             map_style="carto-positron",
-                            zoom=3, center = {"lat": 37.0902, "lon": -95.7129},
+                            zoom=4, center = {"lat": 37.0902, "lon": -95.7129},
                             opacity=0.5,
                             hover_data=['county_name','all_species_count','native_species_count','invasive_species_count','endemic_species_count','native_invasive_ratio'],
                             
                             labels={'species_per_person_demoniator_log':'Species Per Person D (Log)','species_per_person_log':'Species Per Person (Log)','species_per_person':'Species Per Person','species_density':'Species Density','species_density_per_sq_mi':'Species Density per Sq Mi','species_density_log':'Species Density (Log) '}
                             )
+
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+    # title = px.layout.Title(text="Colorado County Species Counts", x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif"))        
+    fig.update_layout(title=dict(text='Colorado County Species Counts', 
+                      x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif")),
+                      updatemenus=[dict(type="dropdown", direction="right", x=0.1, y=1.15, buttons=get_map_buttons(df),showactive=True)],
+                      )
     fig.show()
 
 
