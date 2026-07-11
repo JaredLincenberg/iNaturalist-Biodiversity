@@ -1,14 +1,12 @@
 from datetime import datetime
 from functools import cache
 import os
-from pickle import GLOBAL
 from time import sleep
 
 import requests
 import csv
 import plotly.express as px
 from urllib.request import urlopen
-import json
 import pandas as pd
 import requests_cache      
 import numpy as np
@@ -243,9 +241,14 @@ def add_county_species_counts_to_dataframe(df, force_refresh=False):
         'arthropod_count': 'count',
         'county_name': 'first'
     }).rename(columns={'plant_count': 'flora_species_count', 'animal_count': 'fauna_species_count', 'vertbrate_count': 'vertebrate_species_count', 'arthropod_count': 'arthropod_species_count'})
-    df_county = df_county.assign(flora_Fauna_species_count=lambda x: x['flora_species_count'] + x['fauna_species_count'])
+    return get_county_species_ratios(df_county)
+def get_county_species_ratios(df_county):
+    df_county = df_county.assign(flora_fauna_species_count=lambda x: x['flora_species_count'] + x['fauna_species_count'])
     df_county = df_county.assign(native_invasive_ratio=lambda x: x['native_species_count'] / x['invasive_species_count'].replace(0, np.nan))
+    df_county = df_county.assign(native_all_ratio=lambda x: x['native_species_count'] / x['all_species_count'].replace(0, np.nan))
+    df_county = df_county.assign(invasive_all_ratio=lambda x: x['invasive_species_count'] / x['all_species_count'].replace(0, np.nan))
     return df_county
+
 def add_county_species_counts_to_dataframe_old(df, force_refresh=False):
     df = get_county_dataframe(force_refresh=force_refresh)
 
@@ -337,50 +340,107 @@ def get_iNat_county_data():
     INAT_COUNTY_DATA = counties
     return INAT_COUNTY_DATA
 def get_map_buttons(df):
+    hoverTemplate1 = "<b>%{location}</b><br>%{z:,} species"
+    hoverTemplate2 = "<b>%{location}</b><br>%{z:,} native species<br> %{customdata[1]:.0%} of total<br>"
+    hoverTemplate3 = "<b>%{location}</b><br>%{z:,} invasive species<br> %{customdata[1]:.0%} of total<br>"
+    hoverTemplate4 = "<b>%{location}</b><br>%{z:,} flora species<br>"
+    hoverTemplate5 = "<b>%{location}</b><br>%{z:,} fauna species<br>"
+    hoverTemplate6 = "<b>%{location}</b><br>%{z:,} vertebrate species<br>"
+    hoverTemplate7 = "<b>%{location}</b><br>%{z:,} arthropod species<br>"
+    hoverTemplate8 = "<b>%{location}</b><br>%{z:,} flora + fauna species<br>"
+    hoverTemplate9 = "<b>%{location}</b><br>%{z:,.2f} native/invasive ratio<br> %{customdata[0]:,} native to %{customdata[1]:,} invasive<br> Total species %{customdata[2]:,}<br>"
+
     button1 = go.layout.updatemenu.Button(label="All Species",
                    method="update",
                    args=[{
-                    #    "hovertext":"All Species Count",
                          "z":[df['all_species_count']],
-                        #  "color": [df['all_species_count']],
-                        #  "colorbar": {"title": "All Species Count"},
+                         "hovertemplate": hoverTemplate1,
                          "colorscale": "Blues"},
-
                        {"coloraxis": {"colorscale": "Blues", "colorbar": {"title": {"text": "All Species Count"}}} }])
+    print(df['native_all_ratio'].head())
     button2 = go.layout.updatemenu.Button(label="Native Species",
-                   method="relayout",
-                   args=[{"colorscale": "Cividis",
-                       "color": [df['native_species_count']]},
-                         {"coloraxis": {"colorbar": {"title": "Native Species Count"}}}])
+                   method="update",
+                   args=[{
+                       "z":[df['native_species_count']],
+                       "customdata": [df[['all_species_count', 'native_all_ratio']].values],
+                       "hovertemplate": hoverTemplate2},
+                       {
+                           "coloraxis": {"colorscale": "cividis", 
+                                         "colorbar": {"title": {"text": "Native Species Count"}}} 
+                        }
+                   ])
     button3 = go.layout.updatemenu.Button(label="Invasive Species",
                    method="update",
-                   args=[{"colorscale": "Blues",
-                       "color": [df['invasive_species_count']]},
-                         {"coloraxis": {"colorbar": {"title": "Invasive Species Count"}}}])
+                   args=[{
+                       "z":[df['invasive_species_count']],
+                       "customdata": [df[['all_species_count', 'invasive_all_ratio']].values],
+                       "hovertemplate": hoverTemplate3},
+                       {
+                           "coloraxis": {"colorscale": "cividis",
+                                         "colorbar": {"title": {"text": "Invasive Species Count"}}}
+                       }
+                   ])
     button4 = go.layout.updatemenu.Button(label="Flora Species",
                    method="update",
-                   args=[{"color": [df['flora_species_count']]},
-                         {"coloraxis": {"colorbar": {"title": "Flora Species Count"}}}])
+                   args=[{
+                       "z":[df['flora_species_count']],
+                       "hovertemplate": hoverTemplate4},
+                       {
+                           "coloraxis": {"colorscale": "cividis",
+                                         "colorbar": {"title": {"text": "Flora Species Count"}}}
+                       }
+                   ])
     button5 = go.layout.updatemenu.Button(label="Fauna Species",
                    method="update",
-                   args=[{"color": [df['fauna_species_count']]},
-                         {"coloraxis": {"colorbar": {"title": "Fauna Species Count"}}}])
+                   args=[{
+                       "z":[df['fauna_species_count']],
+                       "hovertemplate": hoverTemplate5},
+                       {
+                           "coloraxis": {"colorscale": "cividis",
+                                         "colorbar": {"title": {"text": "Fauna Species Count"}}}
+                       }
+                   ])
     button6 = go.layout.updatemenu.Button(label="Vertebrate Species",
                    method="update",
-                   args=[{"color": [df['vertebrate_species_count']]},
-                         {"coloraxis": {"colorbar": {"title": "Vertebrate Species Count"}}}])
+                   args=[{
+                       "z":[df['vertebrate_species_count']],
+                       "hovertemplate": hoverTemplate6},
+                       {
+                           "coloraxis": {"colorscale": "cividis",
+                                         "colorbar": {"title": {"text": "Vertebrate Species Count"}}}
+                       }
+                   ])
     button7 = go.layout.updatemenu.Button(label="Arthropod Species",   
                    method="update",
-                   args=[{"color": [df['arthropod_species_count']]},
-                         {"coloraxis": {"colorbar": {"title": "Arthropod Species Count"}}}])
+                   args=[{
+                       "z":[df['arthropod_species_count']],
+                       "hovertemplate": hoverTemplate7},
+                       {
+                           "coloraxis": {"colorscale": "cividis",
+                                         "colorbar": {"title": {"text": "Arthropod Species Count"}}}
+                       }
+                   ])
     button8 = go.layout.updatemenu.Button(label="Flora + Fauna Species",
                    method="update",
-                   args=[{"color": [df['flora_Fauna_species_count']]},
-                         {"coloraxis": {"colorbar": {"title": "Flora + Fauna Species Count"}}}])
+                   args=[{
+                       "z":[df['flora_fauna_species_count']],
+                       "hovertemplate": hoverTemplate8},
+                       {
+                           "coloraxis": {"colorscale": "cividis",
+                                         "colorbar": {"title": {"text": "Flora + Fauna Species Count"}}}
+                       }
+                   ])
     button9 = go.layout.updatemenu.Button(label="Native/Invasive Ratio",
                    method="update",
-                   args=[{"color": [df['native_invasive_ratio']]},
-                         {"coloraxis": {"colorbar": {"title": "Native/Invasive Ratio"}}}])
+                   args=[{
+                       "z":[df['native_invasive_ratio']],
+                       "customdata": [df[['native_species_count', 'invasive_species_count', 'all_species_count']].values],
+                       "hovertemplate": hoverTemplate9},
+                       {
+                           "coloraxis": {"colorscale": "cividis",
+                                         "colorbar": {"title": {"text": "Native/Invasive Ratio"}}}
+                       }
+                   ])
     return [button1, button2, button3, button4, button5, button6, button7, button8, button9]
 
 def main():
@@ -403,7 +463,7 @@ def main():
                             color_continuous_scale="Viridis",
                             #range_color=(0, 12),
                             map_style="carto-positron",
-                            zoom=4, center = {"lat": 37.0902, "lon": -95.7129},
+                            zoom=6, center = {"lat": 39.0, "lon": -105.0},
                             opacity=0.5,
                             hover_data=['county_name','all_species_count','native_species_count','invasive_species_count','endemic_species_count','native_invasive_ratio'],
                             
@@ -414,7 +474,7 @@ def main():
     # title = px.layout.Title(text="Colorado County Species Counts", x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif"))        
     fig.update_layout(title=dict(text='Colorado County Species Counts', 
                       x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif")),
-                      updatemenus=[dict(type="dropdown", direction="right", x=0.1, y=1.15, buttons=get_map_buttons(df),showactive=True)],
+                      updatemenus=[dict(type="buttons", direction="right", y=1.15, xanchor="left", x=0.05, buttons=get_map_buttons(df),showactive=True)],
                       )
     fig.show()
 
