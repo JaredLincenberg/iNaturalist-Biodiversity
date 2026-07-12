@@ -3,6 +3,7 @@ from functools import cache
 import os
 from time import sleep
 
+import plotly
 import requests
 import csv
 import plotly.express as px
@@ -355,8 +356,8 @@ def get_map_buttons(df):
                    args=[{
                          "z":[df['all_species_count']],
                          "hovertemplate": hoverTemplate1,
-                         "colorscale": "Blues"},
-                       {"coloraxis": {"colorscale": "Blues", "colorbar": {"title": {"text": "All Species Count"}}} }])
+                         },
+                       {"coloraxis": {"colorbar": {"title": {"text": "All Species Count"}}} }])
     print(df['native_all_ratio'].head())
     button2 = go.layout.updatemenu.Button(label="Native Species",
                    method="update",
@@ -365,8 +366,7 @@ def get_map_buttons(df):
                        "customdata": [df[['all_species_count', 'native_all_ratio']].values],
                        "hovertemplate": hoverTemplate2},
                        {
-                           "coloraxis": {"colorscale": "cividis", 
-                                         "colorbar": {"title": {"text": "Native Species Count"}}} 
+                           "coloraxis": {"colorbar": {"title": {"text": "Native Species Count"}}} 
                         }
                    ])
     button3 = go.layout.updatemenu.Button(label="Invasive Species",
@@ -376,8 +376,7 @@ def get_map_buttons(df):
                        "customdata": [df[['all_species_count', 'invasive_all_ratio']].values],
                        "hovertemplate": hoverTemplate3},
                        {
-                           "coloraxis": {"colorscale": "cividis",
-                                         "colorbar": {"title": {"text": "Invasive Species Count"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Invasive Species Count"}}}
                        }
                    ])
     button4 = go.layout.updatemenu.Button(label="Flora Species",
@@ -386,8 +385,7 @@ def get_map_buttons(df):
                        "z":[df['flora_species_count']],
                        "hovertemplate": hoverTemplate4},
                        {
-                           "coloraxis": {"colorscale": "cividis",
-                                         "colorbar": {"title": {"text": "Flora Species Count"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Flora Species Count"}}}
                        }
                    ])
     button5 = go.layout.updatemenu.Button(label="Fauna Species",
@@ -396,8 +394,7 @@ def get_map_buttons(df):
                        "z":[df['fauna_species_count']],
                        "hovertemplate": hoverTemplate5},
                        {
-                           "coloraxis": {"colorscale": "cividis",
-                                         "colorbar": {"title": {"text": "Fauna Species Count"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Fauna Species Count"}}}
                        }
                    ])
     button6 = go.layout.updatemenu.Button(label="Vertebrate Species",
@@ -406,8 +403,7 @@ def get_map_buttons(df):
                        "z":[df['vertebrate_species_count']],
                        "hovertemplate": hoverTemplate6},
                        {
-                           "coloraxis": {"colorscale": "cividis",
-                                         "colorbar": {"title": {"text": "Vertebrate Species Count"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Vertebrate Species Count"}}}
                        }
                    ])
     button7 = go.layout.updatemenu.Button(label="Arthropod Species",   
@@ -416,8 +412,7 @@ def get_map_buttons(df):
                        "z":[df['arthropod_species_count']],
                        "hovertemplate": hoverTemplate7},
                        {
-                           "coloraxis": {"colorscale": "cividis",
-                                         "colorbar": {"title": {"text": "Arthropod Species Count"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Arthropod Species Count"}}}
                        }
                    ])
     button8 = go.layout.updatemenu.Button(label="Flora + Fauna Species",
@@ -426,8 +421,7 @@ def get_map_buttons(df):
                        "z":[df['flora_fauna_species_count']],
                        "hovertemplate": hoverTemplate8},
                        {
-                           "coloraxis": {"colorscale": "cividis",
-                                         "colorbar": {"title": {"text": "Flora + Fauna Species Count"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Flora + Fauna Species Count"}}}
                        }
                    ])
     button9 = go.layout.updatemenu.Button(label="Native/Invasive Ratio",
@@ -437,17 +431,31 @@ def get_map_buttons(df):
                        "customdata": [df[['native_species_count', 'invasive_species_count', 'all_species_count']].values],
                        "hovertemplate": hoverTemplate9},
                        {
-                           "coloraxis": {"colorscale": "cividis",
-                                         "colorbar": {"title": {"text": "Native/Invasive Ratio"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Native/Invasive Ratio"}}}
                        }
                    ])
     return [button1, button2, button3, button4, button5, button6, button7, button8, button9]
+def get_color_scale_for_button():
+    ### NOTE: Color scales to do not error on typos and will default.
+
+#     print(px.colors.sequential.__dict__.keys())
+#     print(type(px.colors.sequential.Viridis))
+#     print(type(px.colors.sequential.__name__))
+#     print(type(px.colors.sequential.swatches))
+#     print(px.colors.named_colorscales())
+    colorscale_buttons = [
+        dict(label="Blues", method="relayout", args=[{"coloraxis.colorscale": "Blues"}]),
+        dict(label="Viridis", method="relayout", args=[{"coloraxis.colorscale": "Viridis"}]),
+        dict(label="Cividis", method="relayout", args=[{"coloraxis.colorscale": "Cividis"}]),
+    ]
+    return colorscale_buttons
+
 
 def main():
     get_iNat_county_data()
     print("Got counties data, now plotting test")
     print("Got counties shape data, now plotting test")
-    
+    # print(plotly.express.colors.sequential.__dir__())
     df = get_county_dataframe()
     df = add_county_species_counts_to_dataframe(df, force_refresh=False)
     print(df.head())
@@ -459,23 +467,27 @@ def main():
     print(df['invasive_species_count'].head())
     print(f'requests: {REQUEST_COUNT}, Cache Hits: {CACHE_HIT_COUNT}, Cache Misses: {CACHE_MISS_COUNT}')
 
-    fig = px.choropleth_map(df, geojson=get_county_geometry().json(),featureidkey='properties.NAME', locations='county_name', color='arthropod_species_count',
+    fig = px.choropleth_map(df, geojson=get_county_geometry().json(),featureidkey='properties.NAME', locations='county_name', color='all_species_count',
                             color_continuous_scale="Viridis",
                             #range_color=(0, 12),
-                            map_style="carto-positron",
+                            map_style="carto-darkmatter",
                             zoom=6, center = {"lat": 39.0, "lon": -105.0},
                             opacity=0.5,
-                            hover_data=['county_name','all_species_count','native_species_count','invasive_species_count','endemic_species_count','native_invasive_ratio'],
-                            
-                            labels={'species_per_person_demoniator_log':'Species Per Person D (Log)','species_per_person_log':'Species Per Person (Log)','species_per_person':'Species Per Person','species_density':'Species Density','species_density_per_sq_mi':'Species Density per Sq Mi','species_density_log':'Species Density (Log) '}
                             )
 
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
     # title = px.layout.Title(text="Colorado County Species Counts", x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif"))        
     fig.update_layout(title=dict(text='Colorado County Species Counts', 
                       x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif")),
-                      updatemenus=[dict(type="buttons", direction="right", y=1.15, xanchor="left", x=0.05, buttons=get_map_buttons(df),showactive=True)],
+                      updatemenus=[dict(type="buttons", direction="right", y=1.15, xanchor="left", x=0.05, buttons=get_map_buttons(df),showactive=True),
+                                   dict(type="dropdown", direction="right", y=1.05, xanchor="left", x=0.05, buttons=get_color_scale_for_button(),showactive=True)]
                       )
+    print("Map Buttons:")
+    print(get_map_buttons(df)[0].args)
+    print(get_map_buttons(df)[1].args)
+    button1_trace_args, button1_layout_args = get_map_buttons(df)[0].args
+    fig.update_traces(z=button1_trace_args['z'][0], hovertemplate=button1_trace_args.get('hovertemplate'))
+    fig.update_layout(**button1_layout_args)
     fig.show()
 
 
