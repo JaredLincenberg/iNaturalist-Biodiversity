@@ -12,6 +12,8 @@ import pandas as pd
 import requests_cache      
 import numpy as np
 import plotly.graph_objects as go
+from jinja2 import Environment, FileSystemLoader
+
 requests_cache.install_cache('cache/inaturalist_cache', backend='sqlite', expire_after=10_000_000)
 
 INAT_COLORADO_ID = 34
@@ -476,9 +478,8 @@ def main():
                             )
 
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
-    # title = px.layout.Title(text="Colorado County Species Counts", x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif"))        
     fig.update_layout(title=dict(text='Colorado County Species Counts', 
-                      x=0.5, font=dict(size=24, color='black', family="Arial, sans-serif")),
+                      x=0.5, font=dict(size=24, family="Arial, sans-serif")),
                       updatemenus=[dict(type="buttons", direction="right", y=1.15, xanchor="left", x=0.05, buttons=get_map_buttons(df),showactive=True),
                                    dict(type="dropdown", direction="right", y=1.05, xanchor="left", x=0.05, buttons=get_color_scale_for_button(),showactive=True)]
                       )
@@ -488,6 +489,14 @@ def main():
     button1_trace_args, button1_layout_args = get_map_buttons(df)[0].args
     fig.update_traces(z=button1_trace_args['z'][0], hovertemplate=button1_trace_args.get('hovertemplate'))
     fig.update_layout(**button1_layout_args)
+    # fig.write_html("src")
+
+    env = Environment(loader=FileSystemLoader('templates'))
+    template = env.get_template('index.html')
+    rendered = template.render(fig_div=fig.to_html(full_html=False, div_id='species-map'))
+
+    with open('docs/index.html', 'w') as f:
+        f.write(rendered)
     fig.show()
 
 

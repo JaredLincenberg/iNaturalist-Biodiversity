@@ -3,6 +3,8 @@ cattrs==26.1.0
 certifi==2026.6.17
 charset-normalizer==3.4.7
 idna==3.18
+Jinja2==3.1.6
+MarkupSafe==3.0.3
 narwhals==2.22.1
 numpy==2.5.0
 packaging==26.2
