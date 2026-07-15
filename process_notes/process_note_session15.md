@@ -1,0 +1,45 @@
+# Process Notes — 7/12/26, 11:47 AM – 12:55 PM & 4:52 PM – 5:48 PM
+
+*Verification actions (doc lookups, GitHub reads, diffs) noted below as "confirmed" or "checked" were performed by Claude, not manually by Jared, unless stated otherwise.*
+
+## Decided
+
+- Default-on-load fix applied: page load now reads from button 1's own `args` (`fig.update_traces(z=..., hovertemplate=...)` + `fig.update_layout(**layout_args)`) instead of separately duplicating the same config in the initial `px.choropleth_map()` call — single source of truth. Applied and pushed.
+- Colorscale removed entirely from buttons 1–9's `args` (both trace and layout dicts). Reasoning: a separate colorscale dropdown now owns that piece of state; leaving colorscale in the metric buttons would let clicking any metric button silently overwrite whatever colorscale was picked in the dropdown. Metric buttons now only touch `z`/`hovertemplate`/`customdata`/colorbar title; the colorscale dropdown is sole owner of `coloraxis.colorscale`. This architectural call was reached by Jared himself, mid-session.
+- Colorscale dropdown built (`get_color_scale_for_button()`): three buttons (Blues/Viridis/Cividis), `method="relayout"` with a flat dotted key `{"coloraxis.colorscale": "..."}`. Claude confirmed this is correct because `px.choropleth_map(color_continuous_scale=...)` routes color through `layout.coloraxis`, not a trace-level `colorscale` attribute — different from Plotly's own official dropdown example (which uses `method="restyle"` because `go.Heatmap` traces *do* have a direct `colorscale` trace attribute). Confirmed via a plotly.py GitHub issue (#2352) showing the correct relayout + dotted-key pattern for coloraxis-based figures.
+- Strict colorscale-name validation (raise an error on a typo/wrong-case name, e.g. `"cividis"` vs `"Cividis"`) excluded from 1.0 scope as more involved than warranted right now. The underlying gotcha — Plotly colorscale names silently fall back to a default on invalid/mismatched-case input, which contradicts Plotly's own documented claim that these strings are case-insensitive (a discrepancy Claude found corroborated by an unrelated Plotly community forum thread) — is being documented directly inside `get_color_scale_for_button()` instead of solved in code.
+- Dark mode: Option B chosen (single figure export + JS toggle using `matchMedia` + `Plotly.relayout` on click/system-preference-change) over Option A (two static exports + CSS-only `prefers-color-scheme`). Jared's stated reasoning: willing to accept a JS dependency in exchange for capability (manual override, not just system-preference detection) — "we can hold onto dreams of python forever."
+- Confirmed (via a plotly.js GitHub feature-request issue, #4915, still open) that Plotly-rendered elements — title, colorbar text, map tiles, updatemenu buttons — are SVG/D3-rendered and cannot be reliably targeted with external CSS classes or ids. Theming has to go through Plotly's own layout properties: set in Python at build time, or mutated via `Plotly.relayout()` in JS at runtime.
+- Decided to set `paper_bgcolor`/`plot_bgcolor` to `'transparent'` in Python. This removes those two properties from the JS toggle's responsibility entirely — the actual page background becomes plain CSS on the wrapping div. Narrows the JS toggle's real remaining scope to: `map_style`, title font color, colorbar tick/title font color, and `updatemenus` button bgcolor/font/opacity.
+- Jinja2 chosen as the templating engine for the exported page, over `string.Template`/f-strings/Mako. Reasoning: template inheritance (a base layout + child blocks) scales better than plain string substitution as the site grows to include a methodology write-up and possibly multiple pages; also the de facto standard for this kind of use case (static output, no web framework).
+- GitHub Pages publishing source — Claude recommended a `/docs` folder on the `main` branch (keeps build output alongside `src/`/`data/`/`process_notes/` without branch-switching), confirmed via GitHub's own docs as one of the two "deploy from a branch" options (the other being branch root). Not yet confirmed as configured in repo settings.
+- Jared noted he doesn't typically commit/push regularly and agreed it's worth doing more often — this had made verification harder earlier in the day (Claude repeatedly found nothing new to diff against local changes).
+
+## Tried/built
+
+- Claude verified all pushed changes matched what was discussed (colorscale removed from metric buttons, colorscale dropdown added correctly, default-on-load fix applied correctly) via direct diff against the live GitHub repo.
+- Jared worked through the colorscale-name discovery chain mostly independently: found `px.colors.sequential.__dict__.keys()` himself, identified the type-filtering approach for distinguishing real colorscale entries from non-colorscale dict entries (functions, dunders) himself, found `px.colors.named_colorscales()` himself, and independently discovered the lowercase-vs-actual-case mismatch before Claude had raised it.
+- Dead end, not yet resolved: the default-on-load fix is applied and functioning, but the resulting map colors are reversed from what's expected. Flagged by Jared, not yet investigated.
+- HTML export via Jinja2 confirmed working and pushed by Jared by the end of the second session block. The actual template's content/structure was not reviewed by Claude this session — built and pushed independently.
+- Mid-first-session-block, Jared gave explicit feedback that Claude was giving too much direct help (full working code, back-to-back) rather than Socratic guidance, referencing four options framed in a prior session (point-then-verify against a documented source, generic placeholder variables, sharing search terms, naming the mental model explicitly). Claude acknowledged this and shifted approach for the remainder of that session block.
+- Later, in the second session block, Jared indicated a preference to move back toward direct implementation help ("writing out the figure and setting up the html document and JS code will be more helpful currently"). Rather than assume which mode was wanted, Claude used an explicit check-in with Jared, who chose a middle option: one small worked example per new topic, with Jared building the rest himself.
+
+## Open
+
+- Default-on-load fix produces reversed map colors — root cause not yet investigated.
+- Colorbar title text length changes the rendered colorbar's width (e.g. "All Species Count" vs. "Flora + Fauna Species Count") — flagged as an annoying nitpick, not investigated or fixed.
+- Colorscale-dropdown menu positioning (`x=0.75` was Claude's untested guess, placed alongside the existing 9-button metric row) — not yet empirically checked for overlap/overflow, given the project's prior `x`/`xanchor` overflow bug.
+- Strict colorscale-name validation (raise on invalid/mistyped name) — deliberately deferred past 1.0, documented only, not built.
+- Button-per-colorscale scripted generation (loop over `named_colorscales()`, build one button dict per name) — discussed as a goal, not yet built; only 3 hardcoded buttons (Blues/Viridis/Cividis) exist so far.
+- JS dark-mode toggle — only the title/colorbar-text/map-tile piece has a worked example so far. The `updatemenus` button bgcolor/font/opacity piece (which needs array-index relayout syntax) was left as an exercise, not yet built or verified.
+- `div_id` needs to be explicitly set wherever the figure is exported (`fig.to_html(..., div_id=...)`) for the JS toggle to have a stable target to call `Plotly.relayout` on — not yet confirmed as done.
+- Jinja2 template's actual content/structure (what placeholders exist beyond the figure div — title, CSV download link, methodology text) — built and pushed by Jared this session, not yet reviewed by Claude.
+- GitHub Pages source setting (branch + `/docs` vs. root) — recommended by Claude, not yet confirmed as configured in repo settings.
+- Debug `print()` statements left in `main.py` (`print("Map Buttons:")`, etc.) — flagged, not cleaned up.
+- Title hardcoded to `color='black'` — still live in code. Now a real (not just hypothetical) conflict since `map_style` is currently set to the dark `carto-darkmatter` tile style; will be addressed by the dark-mode JS toggle, but worth confirming it doesn't look broken in the meantime.
+- Unused `df` parameter shadowing in `add_county_species_counts_to_dataframe` — carried over from an earlier session, still not fixed.
+- Map/colorbar grey gap visual issue — carried over from an earlier session, still not investigated.
+
+## Next
+
+Finish and verify the dark-mode JS toggle's `updatemenus` button-styling piece, confirm `div_id` is explicitly set on the figure export, and empirically test the colorscale dropdown's menu positioning — before moving on to reviewing/polishing the actual Jinja2 template content.
