@@ -233,17 +233,20 @@ def add_county_species_counts_to_dataframe(df, force_refresh=False):
     df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(animal_count=lambda x: np.where(x['ancestry'].str.startswith(ANIMALS_ANCESTRY_PATH), x['all_species_count'], np.nan))
     df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(vertbrate_count=lambda x: np.where(x['ancestry'].str.startswith(VERTBRATES_ANCESTRY_PATH), x['all_species_count'], np.nan))
     df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(arthropod_count=lambda x: np.where(x['ancestry'].str.startswith(ARTHROPODS_ANCESTRY_PATH), x['all_species_count'], np.nan))
-    df_county = df_county_species_taxonomy_df.groupby('county_id').agg({
-        'all_species_count': 'count',
-        'native_species_count': 'count',
-        'invasive_species_count': 'count',
-        'endemic_species_count': 'count',
-        'plant_count': 'count',
-        'animal_count': 'count',
-        'vertbrate_count': 'count',
-        'arthropod_count': 'count',
-        'county_name': 'first'
-    }).rename(columns={'plant_count': 'flora_species_count', 'animal_count': 'fauna_species_count', 'vertbrate_count': 'vertebrate_species_count', 'arthropod_count': 'arthropod_species_count'})
+    df_county = df_county_species_taxonomy_df.groupby('county_id').agg(**{
+
+        'all_species_count': ('all_species_count','count'),
+        'all_species_count_min2': ('all_species_count', lambda x: (x > 2).sum()),
+        'all_species_count_min5': ('all_species_count', lambda x: (x > 5).sum()),
+        'native_species_count': ('native_species_count', 'count'),
+        'invasive_species_count': ('invasive_species_count','count'),
+        'endemic_species_count': ('endemic_species_count','count'),
+        'flora_species_count': ('plant_count','count'),
+        'fauna_species_count': ('animal_count','count'),
+        'vertebrate_species_count': ('vertbrate_count', 'count'),
+        'arthropod_species_count': ('arthropod_count','count'),
+        'county_name': ('county_name','first')
+    })
     return get_county_species_ratios(df_county)
 def get_county_species_ratios(df_county):
     df_county = df_county.assign(flora_fauna_species_count=lambda x: x['flora_species_count'] + x['fauna_species_count'])
@@ -318,11 +321,12 @@ def get_species_density():
         df.loc[df['county_name'] == name, 'sqmi'] = sqmi
     df['species_density'] = df.apply(lambda row: int(row['species_count'])/float(row['area']), axis=1, result_type='expand')
     df['species_density_per_sq_mi'] = df.apply(lambda row: int(row['species_count'])/float(row['sqmi']), axis=1, result_type='expand')
-    df['species_density_log'] = df.apply(lambda row: 0 if row['species_density'] == 0 else px.np.log(row['species_density']), axis=1, result_type='expand')
+    df['species_density_log'] = df.apply(lambda row: 0 if row['species_density'] == 0 else np.log(row['species_density']), axis=1, result_type='expand')
     df['species_per_person'] = df.apply(lambda row: int(row['species_count'])/float(row['population']), axis=1, result_type='expand')
-    df['species_per_person_log'] = df.apply(lambda row: 0 if row['species_per_person'] == 0 else px.np.log(row['species_per_person']), axis=1, result_type='expand')
-    df['species_per_person_demoniator_log'] = df.apply(lambda row: 0 if row['species_per_person'] == 0 else int(row['species_count'])/px.np.log(float(row['population'])), axis=1, result_type='expand')
+    df['species_per_person_log'] = df.apply(lambda row: 0 if row['species_per_person'] == 0 else np.log(row['species_per_person']), axis=1, result_type='expand')
+    df['species_per_person_demoniator_log'] = df.apply(lambda row: 0 if row['species_per_person'] == 0 else int(row['species_count'])/np.log(float(row['population'])), axis=1, result_type='expand')
     return df 
+
 
 def get_iNat_county_data():
     global INAT_COUNTY_DATA
@@ -360,7 +364,22 @@ def get_map_buttons(df):
                          "hovertemplate": hoverTemplate1,
                          },
                        {"coloraxis": {"colorbar": {"title": {"text": "All Species Count"}}} }])
-    print(df['native_all_ratio'].head())
+    button10 = go.layout.updatemenu.Button(label="All Species Count >5",
+                    method="update",
+                    args=[{
+                        "z": [df['all_species_count_min5']],
+                            "hovertemplate": hoverTemplate1,
+                        },
+                        {"coloraxis": {"colorbar": {"title": {"text": "All Species Count >5"}}}}
+                    ])
+    button11 = go.layout.updatemenu.Button(label="All Species Count >2",
+                    method="update",
+                    args=[{
+                        "z": [df['all_species_count_min2']],
+                        "hovertemplate": hoverTemplate1,
+                    },
+                        {"coloraxis": {"colorbar": {"title": {"text": "All Species Count >2"}}}}
+                    ])
     button2 = go.layout.updatemenu.Button(label="Native Species",
                    method="update",
                    args=[{
@@ -436,7 +455,7 @@ def get_map_buttons(df):
                            "coloraxis": {"colorbar": {"title": {"text": "Native/Invasive Ratio"}}}
                        }
                    ])
-    return [button1, button2, button3, button4, button5, button6, button7, button8, button9]
+    return [button1, button10, button11, button2, button3, button4, button5, button6, button7, button8, button9]
 def get_color_scale_for_button():
     ### NOTE: Color scales to do not error on typos and will default.
 
@@ -454,10 +473,10 @@ def get_color_scale_for_button():
 
 
 def main():
+    print("Get iNaturalist County Place Ids")
     get_iNat_county_data()
     print("Got counties data, now plotting test")
     print("Got counties shape data, now plotting test")
-    # print(plotly.express.colors.sequential.__dir__())
     df = get_county_dataframe()
     df = add_county_species_counts_to_dataframe(df, force_refresh=False)
     print(df.head())
