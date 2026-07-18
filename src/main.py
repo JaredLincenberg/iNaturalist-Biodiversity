@@ -51,7 +51,7 @@ def get_USA_State_Counties(id):
     return counties
 
 ### Call the iNaturalist API to get the species counts for a given county ID
-def get_County_Species_Counts(county_id, rank='species', acc_below="1000", page=1, per_page=500, native=None, invasive=None,endemic=None,threatened=None, captive="false", identified="true", photos="true", verifiable="true", quality_grade="research"):
+def get_County_Species_Counts(county_id, rank='species', acc_below="1000", page=1, per_page=500, native=None, introduced=None,endemic=None,threatened=None, captive="false", identified="true", photos="true", verifiable="true", quality_grade="research"):
     # List of Tuples, to keep the order of the parameters consistent
     params = [
         ("verifiable", "true"),
@@ -70,8 +70,8 @@ def get_County_Species_Counts(county_id, rank='species', acc_below="1000", page=
     ]
     if native is not None:
         params.append(("native", 'true' if native else 'false'))
-    if invasive is not None:
-        params.append(("native", 'false' if invasive else 'true'))
+    if introduced is not None:
+        params.append(("introduced", 'true' if introduced else 'false'))
     if endemic is not None:
         params.append(("endemic", 'true' if endemic else 'false'))
     if threatened is not None:
@@ -150,15 +150,15 @@ def get_county_species_result(county_id,county_name, filter_type="all", force_re
     pageCount = 1
     switcher = {
         "native": (True, None, None),
-        "invasive": (None, True, None),
+        "introduced": (None, True, None),
         "endemic": (None, None, True),
         "all": (None, None, None)  }
     
-    native, invasive, endemic = switcher.get(filter_type, (None, None, None))
+    native, introduced, endemic = switcher.get(filter_type, (None, None, None))
     
     while total_pages >= current_page:
         
-        response = get_County_Species_Counts(county_id, page=current_page, per_page=per_page, native=native, invasive=invasive, endemic=endemic)
+        response = get_County_Species_Counts(county_id, page=current_page, per_page=per_page, native=native, introduced=introduced, endemic=endemic)
         json_response = response.json()
         if(response is None):
             return
@@ -213,7 +213,7 @@ def add_county_species_counts_to_dataframe(df, force_refresh=False):
         for df_row in df.itertuples():
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="all")
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="native")
-            get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="invasive")
+            get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="introduced")
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="endemic")
         
         df_county_species_df = get_county_species_dataFrame()
@@ -239,7 +239,7 @@ def add_county_species_counts_to_dataframe(df, force_refresh=False):
         'all_species_count_min2': ('all_species_count', lambda x: (x > 2).sum()),
         'all_species_count_min5': ('all_species_count', lambda x: (x > 5).sum()),
         'native_species_count': ('native_species_count', 'count'),
-        'invasive_species_count': ('invasive_species_count','count'),
+        'introduced_species_count': ('introduced_species_count','count'),
         'endemic_species_count': ('endemic_species_count','count'),
         'flora_species_count': ('plant_count','count'),
         'fauna_species_count': ('animal_count','count'),
@@ -250,29 +250,11 @@ def add_county_species_counts_to_dataframe(df, force_refresh=False):
     return get_county_species_ratios(df_county)
 def get_county_species_ratios(df_county):
     df_county = df_county.assign(flora_fauna_species_count=lambda x: x['flora_species_count'] + x['fauna_species_count'])
-    df_county = df_county.assign(native_invasive_ratio=lambda x: x['native_species_count'] / x['invasive_species_count'].replace(0, np.nan))
+    df_county = df_county.assign(native_introduced_ratio=lambda x: x['native_species_count'] / x['introduced_species_count'].replace(0, np.nan))
     df_county = df_county.assign(native_all_ratio=lambda x: x['native_species_count'] / x['all_species_count'].replace(0, np.nan))
-    df_county = df_county.assign(invasive_all_ratio=lambda x: x['invasive_species_count'] / x['all_species_count'].replace(0, np.nan))
+    df_county = df_county.assign(introduced_all_ratio=lambda x: x['introduced_species_count'] / x['all_species_count'].replace(0, np.nan))
     return df_county
 
-def add_county_species_counts_to_dataframe_old(df, force_refresh=False):
-    df = get_county_dataframe(force_refresh=force_refresh)
-
-    def get_species_count(row):
-            try:
-                species_counts = get_County_Species_Counts(county_id=row['id']).json()
-                # print(species_counts)
-                sleep(1.5)  # Sleep for 1.5 second to avoid hitting the API rate limit
-
-                return int(species_counts["total_results"])
-            except Exception as e:
-                # print(row)
-                print(f"Error occurred while fetching species count for {row['display_name']} {row['id']}: {e.__class__.__name__}: {e}")
-                sleep(5)  # Sleep for 5 seconds before retrying
-                # get_species_count(row)  # Retry the request
-                return None
-    if 'species_count' not in df.columns or force_refresh:
-        df['species_count'] = df.apply(lambda row: get_species_count(row), axis=1, result_type='expand')
 
 #### Get the county dataframe for Colorado from the processed CSV file
 def get_county_dataframe(force_refresh=False):
@@ -329,13 +311,13 @@ def get_iNat_county_data():
 def get_map_buttons(df):
     hoverTemplate1 = "<b>%{location}</b><br>%{z:,} species"
     hoverTemplate2 = "<b>%{location}</b><br>%{z:,} native species<br> %{customdata[1]:.0%} of total<br>"
-    hoverTemplate3 = "<b>%{location}</b><br>%{z:,} invasive species<br> %{customdata[1]:.0%} of total<br>"
+    hoverTemplate3 = "<b>%{location}</b><br>%{z:,} introduced species<br> %{customdata[1]:.0%} of total<br>"
     hoverTemplate4 = "<b>%{location}</b><br>%{z:,} flora species<br>"
     hoverTemplate5 = "<b>%{location}</b><br>%{z:,} fauna species<br>"
     hoverTemplate6 = "<b>%{location}</b><br>%{z:,} vertebrate species<br>"
     hoverTemplate7 = "<b>%{location}</b><br>%{z:,} arthropod species<br>"
     hoverTemplate8 = "<b>%{location}</b><br>%{z:,} flora + fauna species<br>"
-    hoverTemplate9 = "<b>%{location}</b><br>%{z:,.2f} native/invasive ratio<br> %{customdata[0]:,} native to %{customdata[1]:,} invasive<br> Total species %{customdata[2]:,}<br>"
+    hoverTemplate9 = "<b>%{location}</b><br>%{z:,.2f} native/introduced ratio<br> %{customdata[0]:,} native to %{customdata[1]:,} introduced<br> Total species %{customdata[2]:,}<br>"
 
     button1 = go.layout.updatemenu.Button(label="All Species",
                    method="update",
@@ -370,14 +352,14 @@ def get_map_buttons(df):
                            "coloraxis": {"colorbar": {"title": {"text": "Native Species Count"}}} 
                         }
                    ])
-    button3 = go.layout.updatemenu.Button(label="Invasive Species",
+    button3 = go.layout.updatemenu.Button(label="Introduced Species",
                    method="update",
                    args=[{
-                       "z":[df['invasive_species_count']],
-                       "customdata": [df[['all_species_count', 'invasive_all_ratio']].values],
+                       "z":[df['introduced_species_count']],
+                       "customdata": [df[['all_species_count', 'introduced_all_ratio']].values],
                        "hovertemplate": hoverTemplate3},
                        {
-                           "coloraxis": {"colorbar": {"title": {"text": "Invasive Species Count"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Introduced Species Count"}}}
                        }
                    ])
     button4 = go.layout.updatemenu.Button(label="Flora Species",
@@ -425,14 +407,14 @@ def get_map_buttons(df):
                            "coloraxis": {"colorbar": {"title": {"text": "Flora + Fauna Species Count"}}}
                        }
                    ])
-    button9 = go.layout.updatemenu.Button(label="Native/Invasive Ratio",
+    button9 = go.layout.updatemenu.Button(label="Native/Introduced Ratio",
                    method="update",
                    args=[{
-                       "z":[df['native_invasive_ratio']],
-                       "customdata": [df[['native_species_count', 'invasive_species_count', 'all_species_count']].values],
+                       "z":[df['native_introduced_ratio']],
+                       "customdata": [df[['native_species_count', 'introduced_species_count', 'all_species_count']].values],
                        "hovertemplate": hoverTemplate9},
                        {
-                           "coloraxis": {"colorbar": {"title": {"text": "Native/Invasive Ratio"}}}
+                           "coloraxis": {"colorbar": {"title": {"text": "Native/Introduced Ratio"}}}
                        }
                    ])
     return [button1, button10, button11, button2, button3, button4, button5, button6, button7, button8, button9]
@@ -445,8 +427,8 @@ def get_color_scale_for_button():
 #     print(type(px.colors.sequential.swatches))
 #     print(px.colors.named_colorscales())
     colorscale_buttons = [
-        dict(label="Blues", method="relayout", args=[{"coloraxis.colorscale": "Blues"}]),
         dict(label="Viridis", method="relayout", args=[{"coloraxis.colorscale": "Viridis"}]),
+        dict(label="Blues", method="relayout", args=[{"coloraxis.colorscale": "Blues"}]),
         dict(label="Cividis", method="relayout", args=[{"coloraxis.colorscale": "Cividis"}]),
     ]
     return colorscale_buttons
@@ -458,15 +440,15 @@ def main():
     print("Got counties data, now plotting test")
     print("Got counties shape data, now plotting test")
     df = get_county_dataframe()
-    df = add_county_species_counts_to_dataframe(df, force_refresh=False)
+    df = add_county_species_counts_to_dataframe(df, force_refresh=True)
     print(df.head())
     taxon = get_taxonomy_data()
     print(taxon.head())
     import plotly.express as px
     print("Got counties data, now plotting Species Counts")
-    print(df['invasive_species_count'].head())
+    print(df['introduced_species_count'].head())
     print(f'requests: {REQUEST_COUNT}, Cache Hits: {CACHE_HIT_COUNT}, Cache Misses: {CACHE_MISS_COUNT}')
-
+    df.to_csv("data/processed/colorado_county_species_count_"+datetime.now().strftime("%Y-%m-%d")+".csv")
     fig = px.choropleth_map(df, geojson=get_county_geometry().json(),featureidkey='properties.NAME', locations='county_name', color='all_species_count',
                             color_continuous_scale="Viridis",
                             #range_color=(0, 12),
@@ -481,12 +463,12 @@ def main():
                       updatemenus=[dict(type="buttons", direction="right", y=1.15, xanchor="left", x=0.05, buttons=get_map_buttons(df),showactive=True),
                                    dict(type="dropdown", direction="right", y=1.05, xanchor="left", x=0.05, buttons=get_color_scale_for_button(),showactive=True)]
                       )
-    print("Map Buttons:")
-    print(get_map_buttons(df)[0].args)
-    print(get_map_buttons(df)[1].args)
-    button1_trace_args, button1_layout_args = get_map_buttons(df)[0].args
-    fig.update_traces(z=button1_trace_args['z'][0], hovertemplate=button1_trace_args.get('hovertemplate'))
-    fig.update_layout(**button1_layout_args)
+    # print("Map Buttons:")
+    # print(get_map_buttons(df)[0].args)
+    # print(get_map_buttons(df)[1].args)
+    # button1_trace_args, button1_layout_args = get_map_buttons(df)[0].args
+    # fig.update_traces(z=button1_trace_args['z'][0], hovertemplate=button1_trace_args.get('hovertemplate'))
+    # fig.update_layout(**button1_layout_args)
     # fig.write_html("src")
 
     env = Environment(loader=FileSystemLoader('templates'))
