@@ -440,7 +440,7 @@ def main():
     print("Got counties data, now plotting test")
     print("Got counties shape data, now plotting test")
     df = get_county_dataframe()
-    df = add_county_species_counts_to_dataframe(df, force_refresh=True)
+    df = add_county_species_counts_to_dataframe(df, force_refresh=False)
     print(df.head())
     taxon = get_taxonomy_data()
     print(taxon.head())
@@ -455,7 +455,7 @@ def main():
                             map_style="carto-darkmatter",
                             zoom=6, center = {"lat": 39.0, "lon": -105.0},
                             opacity=0.5,
-                            )
+                            height=1000)
 
     fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
     fig.update_layout(title=dict(text='Colorado County Species Counts', 
@@ -470,14 +470,19 @@ def main():
     # fig.update_traces(z=button1_trace_args['z'][0], hovertemplate=button1_trace_args.get('hovertemplate'))
     # fig.update_layout(**button1_layout_args)
     # fig.write_html("src")
-
+    # fig.update_yaxes(automargin=True)
     env = Environment(loader=FileSystemLoader('templates'))
     template = env.get_template('index.html')
-    rendered = template.render(fig_div=fig.to_html(full_html=False, div_id='species-map'))
+    fig.update_layout(autosize=True, height=None)
+    fig_html = fig.to_html(
+    config={"responsive": True},
+    default_height="80vh",
+    full_html=False,)
+    rendered = template.render(fig_div=fig.to_html(full_html=False, config={"responsive": True}, default_height="80vh"))
 
     with open('docs/index.html', 'w') as f:
         f.write(rendered)
-    fig.show()
+    # fig.show()
 
 
 
