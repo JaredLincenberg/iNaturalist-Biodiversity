@@ -452,16 +452,16 @@ def main():
     fig = px.choropleth_map(df, geojson=get_county_geometry().json(),featureidkey='properties.NAME', locations='county_name', color='all_species_count',
                             color_continuous_scale="Viridis",
                             #range_color=(0, 12),
-                            map_style="carto-darkmatter",
+                            map_style="carto-positron",
                             zoom=6, center = {"lat": 39.0, "lon": -105.0},
                             opacity=0.5,
                             height=1000)
 
-    fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+    fig.update_layout(margin={"r":20,"t":50,"l":20,"b":10})
     fig.update_layout(title=dict(text='Colorado County Species Counts', 
                       x=0.5, font=dict(size=24, family="Arial, sans-serif")),
-                      updatemenus=[dict(type="buttons", direction="right", y=1.15, xanchor="left", x=0.05, buttons=get_map_buttons(df),showactive=True),
-                                   dict(type="dropdown", direction="right", y=1.05, xanchor="left", x=0.05, buttons=get_color_scale_for_button(),showactive=True)]
+                      updatemenus=[dict(type="dropdown", direction="down", y=1.15, xanchor="left", x=0.00, buttons=get_map_buttons(df),showactive=True),
+                                   dict(type="dropdown", direction="down", y=1.15, yanchor="top", xanchor="left", x=0.20, buttons=get_color_scale_for_button(),showactive=True)]
                       )
     # print("Map Buttons:")
     # print(get_map_buttons(df)[0].args)
@@ -471,14 +471,10 @@ def main():
     # fig.update_layout(**button1_layout_args)
     # fig.write_html("src")
     # fig.update_yaxes(automargin=True)
+    fig.update_layout(autosize=True, height=None)
     env = Environment(loader=FileSystemLoader('templates'))
     template = env.get_template('index.html')
-    fig.update_layout(autosize=True, height=None)
-    fig_html = fig.to_html(
-    config={"responsive": True},
-    default_height="80vh",
-    full_html=False,)
-    rendered = template.render(fig_div=fig.to_html(full_html=False, config={"responsive": True}, default_height="80vh"))
+    rendered = template.render(fig_div=fig.to_html(full_html=False, config={"responsive": True}, default_height="80vh", div_id="bdMap"))
 
     with open('docs/index.html', 'w') as f:
         f.write(rendered)
