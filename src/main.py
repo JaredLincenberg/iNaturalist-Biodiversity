@@ -325,14 +325,14 @@ def get_map_buttons(df):
                          "z":[df['all_species_count']],
                          "hovertemplate": hoverTemplate1,
                          },
-                       {"coloraxis": {"colorbar": {"title": {"text": "All Species Count"}}} }])
+                       {"coloraxis.colorbar.title.text": "All Species Count"}])
     button10 = go.layout.updatemenu.Button(label="All Species Count >5",
                     method="update",
                     args=[{
                         "z": [df['all_species_count_min5']],
                             "hovertemplate": hoverTemplate1,
                         },
-                        {"coloraxis": {"colorbar": {"title": {"text": "All Species Count >5"}}}}
+                        {"coloraxis.colorbar.title.text": "All Species Count >5"}
                     ])
     button11 = go.layout.updatemenu.Button(label="All Species Count >2",
                     method="update",
@@ -340,7 +340,7 @@ def get_map_buttons(df):
                         "z": [df['all_species_count_min2']],
                         "hovertemplate": hoverTemplate1,
                     },
-                        {"coloraxis": {"colorbar": {"title": {"text": "All Species Count >2"}}}}
+                        {"coloraxis.colorbar.title.text":"All Species Count >2"}
                     ])
     button2 = go.layout.updatemenu.Button(label="Native Species",
                    method="update",
@@ -348,9 +348,7 @@ def get_map_buttons(df):
                        "z":[df['native_species_count']],
                        "customdata": [df[['all_species_count', 'native_all_ratio']].values],
                        "hovertemplate": hoverTemplate2},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Native Species Count"}}} 
-                        }
+                       {"coloraxis.colorbar.title.text":"Native Species Count"}
                    ])
     button3 = go.layout.updatemenu.Button(label="Introduced Species",
                    method="update",
@@ -358,54 +356,42 @@ def get_map_buttons(df):
                        "z":[df['introduced_species_count']],
                        "customdata": [df[['all_species_count', 'introduced_all_ratio']].values],
                        "hovertemplate": hoverTemplate3},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Introduced Species Count"}}}
-                       }
+                       {"coloraxis.colorbar.title.text": "Introduced Species Count"}
                    ])
     button4 = go.layout.updatemenu.Button(label="Flora Species",
                    method="update",
                    args=[{
                        "z":[df['flora_species_count']],
                        "hovertemplate": hoverTemplate4},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Flora Species Count"}}}
-                       }
+                       {"coloraxis.colorbar.title.text": "Flora Species Count"}
                    ])
     button5 = go.layout.updatemenu.Button(label="Fauna Species",
                    method="update",
                    args=[{
                        "z":[df['fauna_species_count']],
                        "hovertemplate": hoverTemplate5},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Fauna Species Count"}}}
-                       }
+                       {"coloraxis.colorbar.title.text": "Fauna Species Count"}
                    ])
     button6 = go.layout.updatemenu.Button(label="Vertebrate Species",
                    method="update",
                    args=[{
                        "z":[df['vertebrate_species_count']],
                        "hovertemplate": hoverTemplate6},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Vertebrate Species Count"}}}
-                       }
+                       {"coloraxis.colorbar.title.text":"Vertebrate Species Count"}
                    ])
     button7 = go.layout.updatemenu.Button(label="Arthropod Species",   
                    method="update",
                    args=[{
                        "z":[df['arthropod_species_count']],
                        "hovertemplate": hoverTemplate7},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Arthropod Species Count"}}}
-                       }
+                       {"coloraxis.colorbar.title.text":"Arthropod Species Count"}
                    ])
     button8 = go.layout.updatemenu.Button(label="Flora + Fauna Species",
                    method="update",
                    args=[{
                        "z":[df['flora_fauna_species_count']],
                        "hovertemplate": hoverTemplate8},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Flora + Fauna Species Count"}}}
-                       }
+                       {"coloraxis.colorbar.title.text":"Flora + Fauna Species Count"}
                    ])
     button9 = go.layout.updatemenu.Button(label="Native/Introduced Ratio",
                    method="update",
@@ -413,23 +399,27 @@ def get_map_buttons(df):
                        "z":[df['native_introduced_ratio']],
                        "customdata": [df[['native_species_count', 'introduced_species_count', 'all_species_count']].values],
                        "hovertemplate": hoverTemplate9},
-                       {
-                           "coloraxis": {"colorbar": {"title": {"text": "Native/Introduced Ratio"}}}
-                       }
+                       {"coloraxis.colorbar.title.text":"Native/Introduced Ratio"}
                    ])
     return [button1, button10, button11, button2, button3, button4, button5, button6, button7, button8, button9]
 def get_color_scale_for_button():
     ### NOTE: Color scales to do not error on typos and will default.
+    ### NOTE: Only Color names here work https://plotly.com/python/reference/layout/coloraxis/#layout-coloraxis-colorscale
 
-#     print(px.colors.sequential.__dict__.keys())
-#     print(type(px.colors.sequential.Viridis))
-#     print(type(px.colors.sequential.__name__))
-#     print(type(px.colors.sequential.swatches))
-#     print(px.colors.named_colorscales())
+    # print(px.colors.sequential.__dict__.keys())
+    # print(type(px.colors.sequential.Viridis))
+    # print(type(px.colors.sequential.__name__))
+    # print(type(px.colors.sequential.swatches))
+    # print(px.colors.named_colorscales())
+    # print(px.colors.sequential.Plotly3_r)
     colorscale_buttons = [
         dict(label="Viridis", method="relayout", args=[{"coloraxis.colorscale": "Viridis"}]),
         dict(label="Blues", method="relayout", args=[{"coloraxis.colorscale": "Blues"}]),
         dict(label="Cividis", method="relayout", args=[{"coloraxis.colorscale": "Cividis"}]),
+        dict(label="Blackbody", method="relayout", args=[{"coloraxis.colorscale": "Blackbody"}]),
+        dict(label="Rainbow", method="relayout", args=[{"coloraxis.colorscale": "Rainbow"}]),
+        dict(label="Hot", method="relayout", args=[{"coloraxis.colorscale": "Hot"}]),
+        
     ]
     return colorscale_buttons
 
@@ -463,14 +453,11 @@ def main():
                       updatemenus=[dict(type="dropdown", direction="down", y=1.15, xanchor="left", x=0.00, buttons=get_map_buttons(df),showactive=True),
                                    dict(type="dropdown", direction="down", y=1.15, yanchor="top", xanchor="left", x=0.20, buttons=get_color_scale_for_button(),showactive=True)]
                       )
-    # print("Map Buttons:")
-    # print(get_map_buttons(df)[0].args)
-    # print(get_map_buttons(df)[1].args)
-    # button1_trace_args, button1_layout_args = get_map_buttons(df)[0].args
-    # fig.update_traces(z=button1_trace_args['z'][0], hovertemplate=button1_trace_args.get('hovertemplate'))
-    # fig.update_layout(**button1_layout_args)
-    # fig.write_html("src")
-    # fig.update_yaxes(automargin=True)
+
+    button1_trace_args, button1_layout_args = get_map_buttons(df)[0].args
+    fig.update_traces(z=button1_trace_args['z'][0], hovertemplate=button1_trace_args.get('hovertemplate'))
+    fig.update_layout(**button1_layout_args)
+
     fig.update_layout(autosize=True, height=None)
     env = Environment(loader=FileSystemLoader('templates'))
     template = env.get_template('index.html')
