@@ -14,12 +14,16 @@ import numpy as np
 import plotly.graph_objects as go
 from jinja2 import Environment, FileSystemLoader
 
-requests_cache.install_cache('cache/inaturalist_cache', backend='sqlite', expire_after=10_000_000)
+WEEK_SECONDS=60*60*24*7
+requests_cache.install_cache('cache/inaturalist_cache', backend='sqlite', expire_after=WEEK_SECONDS)
 
-INAT_COLORADO_ID = 34
-INAT_USA_ID = 1
 INAT_NORTH_AMERICA_ID = 97394
+INAT_USA_ID = 1
+INAT_COLORADO_ID = 34
+
+INAT_PLACE_TYPE_STATE = 8
 INAT_PLACE_TYPE_COUNTY = 9
+INAT_ADMIN_LEVEL_STATE = 10
 INAT_ADMIN_LEVEL_COUNTY = 20
 
 COUNTY_GEOJSON = None
@@ -37,18 +41,29 @@ PLANTS_ANCESTRY_PATH = "48460/47126/"
 ANIMALS_ANCESTRY_PATH = "48460/1/"
 VERTBRATES_ANCESTRY_PATH = "48460/1/2/355675/"
 ARTHROPODS_ANCESTRY_PATH = "48460/1/47120/"
-# PLANTS_TAXON_ID = 47126
-# ANIMALS = ['Aves', 'Mammalia', 'Reptilia', 'Amphibia', 'Actinopterygii', 'Chondrichthyes', 'Cephalaspidomorphi', 'Myxini']
 
 #### Get the counties for a given state ID from the iNaturalist places CSV file
-def get_USA_State_Counties(id):
+def get_USA_State_Counties(state_id):
     counties = []
+    county_ancestry_path = str(INAT_NORTH_AMERICA_ID) + "/" + str(INAT_USA_ID) + "/" + str(state_id)
+
+    # See https://www.inaturalist.org/pages/developers
+    # Source: http://www.inaturalist.org/places/inaturalist-places.csv.zip
     with open('data/raw/inaturalist-places.csv', 'r') as files:
         reader = csv.DictReader(files)
         for row in reader:
-            if row['ancestry'] == str(INAT_NORTH_AMERICA_ID) + "/" + str(INAT_USA_ID) + "/" + str(id) and row['place_type'] == str(INAT_PLACE_TYPE_COUNTY) and row['admin_level'] == str(INAT_ADMIN_LEVEL_COUNTY):
+            if row['ancestry'] == county_ancestry_path and row['place_type'] == str(INAT_PLACE_TYPE_COUNTY) and row['admin_level'] == str(INAT_ADMIN_LEVEL_COUNTY):
                 counties.append(row)
     return counties
+def get_USA_State(state_id):
+    state = []
+    with open('data/raw/inaturalist-places.csv', 'r') as files:
+        reader = csv.DictReader(files)
+        for row in reader:
+            if row['id']==str(state_id):
+                state= row
+                break
+    return state
 
 ### Call the iNaturalist API to get the species counts for a given county ID
 def get_County_Species_Counts(county_id, rank='species', acc_below="1000", page=1, per_page=500, native=None, introduced=None,endemic=None,threatened=None, captive="false", identified="true", photos="true", verifiable="true", quality_grade="research"):
@@ -107,7 +122,11 @@ def get_county_geometry():
             ("outSR", "4326"),
             ("f", "geojson")
         ]
-        response = requests.get("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Census_Counties/FeatureServer/0/query", params=params)
+        try:
+            response = requests.get("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Census_Counties/FeatureServer/0/query", params=params)
+        except requests.exceptions.RequestException as e:
+            print(f"Error occurred while making the request: {e}")
+            return None    
         COUNTY_GEOJSON = response
     return COUNTY_GEOJSON
 
@@ -121,8 +140,12 @@ def get_county_properties():
             "returnGeometry": "false",
             "outSR": "4326",
             "f": "geojson"
-        }  
-        response = requests.get("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Census_Counties/FeatureServer/0/query", params=params)
+        }
+        try:  
+            response = requests.get("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Census_Counties/FeatureServer/0/query", params=params)
+        except requests.exceptions.RequestException as e:
+            print(f"Error occurred while making the request: {e}")
+            return None       
         COUNTY_PROPERTIES = response
     return COUNTY_PROPERTIES
 
@@ -138,7 +161,7 @@ def get_taxonomy_data():
         TAXONOMY_DATA = pd.DataFrame(columns=['taxon_id','name','rank','ancestry','iconic_taxon_name','iconic_taxon_id','preferred_common_name','wikipedia_url'])
         TAXONOMY_DATA.set_index(['taxon_id'], inplace=True)
     return TAXONOMY_DATA
-def get_county_species_result(county_id,county_name, filter_type="all", force_refresh=False):
+def get_county_species_result(county_id, county_name, filter_type="all", force_refresh=False):
     print(filter_type, county_id, county_name)
     global COUNTY_SPECIES
     global TAXONOMY_DATA
@@ -201,15 +224,15 @@ def add_county_species_counts_to_dataframe(df, force_refresh=False):
     df = get_county_dataframe(force_refresh=force_refresh)
     yearMonthDay = datetime.now().strftime("%Y-%m-%d")
     yearMonth = datetime.now().strftime("%Y-%m")
-    if os.path.exists("data/processed/colorado_county_species_counts_"+yearMonthDay+".parquet") and os.path.exists("data/processed/taxonomy_data_"+yearMonth+".parquet") and not force_refresh:
-        print("Loading county species counts from parquet file")
-        df_county_species_df = pd.read_parquet("data/processed/colorado_county_species_counts_"+yearMonthDay+".parquet")
-        print("Loading taxonomy data from parquet file")
-        df_taxonomy_df = pd.read_parquet("data/processed/taxonomy_data_"+yearMonth+".parquet")
+    species_count_path = f"cache/colorado_county_species_counts_{yearMonthDay}.parquet" 
+    taxomony_data_path = f"cache/taxonomy_data_{yearMonth}.parquet"
+
+    if os.path.exists(species_count_path) and os.path.exists(taxomony_data_path) and not force_refresh:
+        df_county_species_df = pd.read_parquet(species_count_path)
+        df_taxonomy_df = pd.read_parquet(taxomony_data_path)
         global TAXONOMY_DATA
         TAXONOMY_DATA = df_taxonomy_df
     else:
-        print("Getting county species counts from iNaturalist API")
         for df_row in df.itertuples():
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="all")
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="native")
@@ -217,24 +240,19 @@ def add_county_species_counts_to_dataframe(df, force_refresh=False):
             get_county_species_result(county_id=df_row.id, county_name=df_row.county_name, filter_type="endemic")
         
         df_county_species_df = get_county_species_dataFrame()
-        df_county_species_df.to_parquet("data/processed/colorado_county_species_counts_"+yearMonthDay+".parquet", index=True)
+        df_county_species_df.to_parquet(species_count_path, index=True)
         df_taxonomy_df = get_taxonomy_data()
-        df_taxonomy_df.to_parquet("data/processed/taxonomy_data_"+yearMonth+".parquet", index=True)
-        print("Finished getting species counts for all counties. Saving to parquet file")
+        df_taxonomy_df.to_parquet(taxomony_data_path, index=True)
+        # print("Finished getting species counts for all counties. Saving to parquet file")
     
-    # df_county_species_df.reset_index(inplace=True)
-    # df_county_species_df = df_county_species_df[df_county_species_df['all_species_count'] > 2]
-    print("df_county_species_df head:", df_county_species_df.head())
+    # Create Dataframe
     df_county_species_taxonomy_df = pd.merge(df_county_species_df, df_taxonomy_df, left_on='taxon_id', right_index=True)
-    # print("df_county_species_taxonomy_df head after merge:", df_county_species_taxonomy_df.head())
-    # np.where()
-    # df_county_species_taxonomy_df.where(df_county_species_taxonomy_df['ancestry'].str.startswith(PLANTS_ANCESTRY_PATH),)
+
     df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(plant_count=lambda x: np.where(x['ancestry'].str.startswith(PLANTS_ANCESTRY_PATH), x['all_species_count'], np.nan))
     df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(animal_count=lambda x: np.where(x['ancestry'].str.startswith(ANIMALS_ANCESTRY_PATH), x['all_species_count'], np.nan))
     df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(vertbrate_count=lambda x: np.where(x['ancestry'].str.startswith(VERTBRATES_ANCESTRY_PATH), x['all_species_count'], np.nan))
     df_county_species_taxonomy_df = df_county_species_taxonomy_df.assign(arthropod_count=lambda x: np.where(x['ancestry'].str.startswith(ARTHROPODS_ANCESTRY_PATH), x['all_species_count'], np.nan))
     df_county = df_county_species_taxonomy_df.groupby('county_id').agg(**{
-
         'all_species_count': ('all_species_count','count'),
         'all_species_count_min2': ('all_species_count', lambda x: (x > 2).sum()),
         'all_species_count_min5': ('all_species_count', lambda x: (x > 5).sum()),
@@ -257,53 +275,48 @@ def get_county_species_ratios(df_county):
 
 
 #### Get the county dataframe for Colorado from the processed CSV file
-def get_county_dataframe(force_refresh=False):
+def get_county_dataframe(state_id=INAT_COLORADO_ID, force_refresh=False):
     global INAT_COUNTY_DATAFRAME
     if INAT_COUNTY_DATAFRAME is not None:
         return INAT_COUNTY_DATAFRAME
     import pandas as pd
     yearMonthDay = datetime.now().strftime("%Y-%m-%d")
-    if not os.path.exists("data/processed/colorado_counties_"+yearMonthDay+".parquet") or force_refresh:
-        d = get_iNat_county_data()
+    state = get_USA_State(state_id=state_id)
+    stateName =state['name']
+    filePath = f"cache/{stateName}_counties_{yearMonthDay}.parquet"
+    if not os.path.exists(filePath) or force_refresh:
+        d = get_iNat_state_county_data(state_id=state_id, force_refresh=force_refresh)
         df = pd.DataFrame(d)
-        # df = pd.read_csv("data/processed/colorado_counties.csv",
-                        # dtype={"fips": str})
+
+        # Get county name to match with geojson county shape data.
         df['county_name'] = df.apply(lambda row: row['display_name'].split(',')[0], axis=1, result_type='expand')
-        # def get_species_count(row):
-        #     species_counts = get_County_Species_Counts(county_id=row['id'])
-        #     sleep(1.5)  # Sleep for 1 second to avoid hitting the API rate limit
-        #     print(row['display_name'], species_counts["total_results"])
-        #     return species_counts["total_results"]
-        # df['species_count'] = df.apply(lambda row: get_species_count(row), axis=1, result_type='expand')
-        # df = add_county_species_counts_to_dataframe(df)
+
     else:
-        print("Loading county dataframe from parquet file")
-        df = pd.read_parquet("data/processed/colorado_counties_"+yearMonthDay+".parquet")
-    if not os.path.exists("data/processed/colorado_counties_"+yearMonthDay+".parquet"):
-        df.to_parquet("data/processed/colorado_counties_"+yearMonthDay+".parquet", index=False)
-    print("Finished getting species counts for all counties")
-    # for county in df.to_dict(orient='records'):
-    #     species_counts = get_County_Species_Counts(county_id=county['id'])
-    #     print(county['display_name'], species_counts["total_results"])
-    #     sleep(1)  # Sleep for 1 second to avoid hitting the API rate limit
-    #     county['species_count'] = species_counts["total_results"]
+        # print("Loading county dataframe from parquet file")
+        df = pd.read_parquet(filePath)
+    if not os.path.exists(filePath):
+        df.to_parquet(filePath, index=False)
+    # print("Finished getting species counts for all counties")
+
     INAT_COUNTY_DATAFRAME = df
     return INAT_COUNTY_DATAFRAME
 
-def get_iNat_county_data():
+def get_iNat_state_county_data(state_id=INAT_COLORADO_ID, force_refresh=False):
     global INAT_COUNTY_DATA
     if INAT_COUNTY_DATA is not None:
         return INAT_COUNTY_DATA
-    if os.path.exists("data/processed/colorado_counties.csv"):
-        print("File exists")
+    stateInformation = get_USA_State(state_id)
+    stateName = stateInformation['name']
+    county_path = f"cache/inat_{stateName}_counties.csv"
+    if os.path.exists(county_path) and not force_refresh:
         counties = []
-        with open('data/processed/colorado_counties.csv', 'r') as files:
+        with open(county_path, 'r') as files:
             reader = csv.DictReader(files)
             for row in reader:
                 counties.append(row)
     else:
-        counties = get_USA_State_Counties(id=INAT_COLORADO_ID)
-        write_csv("data/processed/colorado_counties.csv", counties)
+        counties = get_USA_State_Counties(state_id=state_id)
+        write_csv(county_path, counties)
     counties.sort(key=lambda x: x['display_name'], reverse=False)
 
     INAT_COUNTY_DATA = counties
@@ -426,14 +439,11 @@ def get_color_scale_for_button():
 
 def main():
     print("Get iNaturalist County Place Ids")
-    get_iNat_county_data()
+    get_iNat_state_county_data(state_id=INAT_COLORADO_ID, force_refresh=True)
     print("Got counties data, now plotting test")
     print("Got counties shape data, now plotting test")
-    df = get_county_dataframe()
-    df = add_county_species_counts_to_dataframe(df, force_refresh=False)
-    print(df.head())
-    taxon = get_taxonomy_data()
-    print(taxon.head())
+    county_df = get_county_dataframe()
+    df = add_county_species_counts_to_dataframe(county_df, force_refresh=False)
     import plotly.express as px
     print("Got counties data, now plotting Species Counts")
     print(df['introduced_species_count'].head())
