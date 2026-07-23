@@ -439,7 +439,7 @@ def get_color_scale_for_button():
 
 def main():
     print("Get iNaturalist County Place Ids")
-    get_iNat_state_county_data(state_id=INAT_COLORADO_ID, force_refresh=True)
+    get_iNat_state_county_data(state_id=INAT_COLORADO_ID, force_refresh=False)
     print("Got counties data, now plotting test")
     print("Got counties shape data, now plotting test")
     county_df = get_county_dataframe()
